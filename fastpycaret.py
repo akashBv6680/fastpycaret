@@ -16,7 +16,7 @@ import ssl
 import imaplib
 import email
 
-# Import PyCaret modules
+# Import PyCaret modules for Classification and Regression
 # We import specific functions to avoid name clashes and keep code clear
 from pycaret.classification import setup as class_setup, compare_models as class_compare, tune_model as class_tune, \
                                   evaluate_model as class_evaluate, plot_model as class_plot, save_model as class_save, \
@@ -24,13 +24,6 @@ from pycaret.classification import setup as class_setup, compare_models as class
 from pycaret.regression import setup as reg_setup, compare_models as reg_compare, tune_model as reg_tune, \
                                evaluate_model as reg_evaluate, plot_model as reg_plot, save_model as reg_save, \
                                load_model as reg_load, predict_model as reg_predict, interpret_model as reg_interpret
-from pycaret.clustering import setup as cluster_setup, create_model as cluster_create, assign_model as cluster_assign, \
-                               plot_model as cluster_plot, save_model as cluster_save, load_model as cluster_load
-from pycaret.anomaly import setup as anomaly_setup, create_model as anomaly_create, assign_model as anomaly_assign, \
-                            plot_model as anomaly_plot, save_model as anomaly_save, load_model as anomaly_load
-from pycaret.nlp import setup as nlp_setup, create_model as nlp_create, assign_model as nlp_assign, \
-                        plot_model as nlp_plot, save_model as nlp_save, load_model as nlp_load
-from pycaret.arules import setup as arules_setup, create_model as arules_create, predict_model as arules_predict
 
 
 # === Email Config (using st.secrets for security) ===
@@ -48,7 +41,7 @@ IMAP_SERVER = "imap.gmail.com"
 
 # === Streamlit Config ===
 st.set_page_config(page_title="⚡ Fast AutoML Agent", layout="wide")
-st.title("🤖 Fast AutoML + Email Agent")
+st.title("🤖 Fast AutoML (Regression & Classification) + Email Agent")
 st.markdown("---")
 
 # --- Helper Functions ---
@@ -252,219 +245,162 @@ if st.session_state.df is not None and st.session_state.target_col is not None:
             elif st.session_state.task_type == "regression":
                 st.session_state.pycaret_exp = reg_setup(data=st.session_state.df, target=st.session_state.target_col,
                                                           session_id=123, silent=True, verbose=False, html=False)
-            # Unsupervised tasks
-            elif st.session_state.task_type == "clustering":
-                st.session_state.pycaret_exp = cluster_setup(data=st.session_state.df, session_id=123, silent=True, verbose=False, html=False)
-            elif st.session_state.task_type == "anomaly":
-                st.session_state.pycaret_exp = anomaly_setup(data=st.session_state.df, session_id=123, silent=True, verbose=False, html=False)
-            elif st.session_state.task_type == "nlp":
-                text_col_options = [col for col in st.session_state.df.columns if st.session_state.df[col].dtype == 'object']
-                if not text_col_options:
-                    st.warning("No text columns found for NLP. Please ensure your dataset has text data.")
-                    st.session_state.pycaret_exp = None # Prevent further steps if no text column
-                else:
-                    text_col = st.sidebar.selectbox("Select Text Column for NLP", text_col_options, key='nlp_text_col')
-                    st.session_state.pycaret_exp = nlp_setup(data=st.session_state.df, target=text_col, session_id=123, silent=True, verbose=False, html=False)
-            elif st.session_state.task_type == "arules":
-                # For Association Rules, need transaction and item columns
-                st.warning("Association Rule Mining requires specific data format (transaction ID, item ID). Ensure your data is suitable.")
-                transaction_col_options = st.session_state.df.columns.tolist()
-                item_col_options = st.session_state.df.columns.tolist()
-                
-                transaction_col = st.sidebar.selectbox("Select Transaction ID Column", transaction_col_options, key='arules_trans_col')
-                item_col = st.sidebar.selectbox("Select Item Column", item_col_options, key='arules_item_col')
-                st.session_state.pycaret_exp = arules_setup(data=st.session_state.df, transaction_id=transaction_col, item_id=item_col, session_id=123, silent=True, verbose=False, html=False)
+            else:
+                st.warning("Selected task type is not supported in this streamlined version (only Classification and Regression).")
+                st.session_state.pycaret_exp = None # Ensure experiment is not set if unsupported
 
         if st.session_state.pycaret_exp is not None:
             st.success("PyCaret Setup Complete! Data is ready for modeling.")
         else:
-            st.error("PyCaret Setup failed. Please check your data and selections.")
+            st.error("PyCaret Setup failed or unsupported task type. Please check your data and selections.")
 
 
     if st.session_state.pycaret_exp is not None:
-        if st.session_state.task_type in ["classification", "regression"]:
-            st.subheader("Automated Model Selection and Tuning")
-            st.info("To speed up execution, PyCaret will compare a limited number of models and tune the best one with fewer iterations by default. For a more exhaustive search, consider running this process offline.")
+        st.subheader("Automated Model Selection and Tuning")
+        st.info("To speed up execution, PyCaret will compare a limited number of models and tune the best one with fewer iterations by default. For a more exhaustive search, consider running this process offline.")
 
-            if st.button("📊 Compare & Select Best Model (Fast)"):
-                with st.spinner("Comparing various machine learning models (fast mode)... This might take a moment."):
-                    if st.session_state.task_type == "classification":
-                        # Use n_select to quickly get the top model
-                        st.session_state.best_model_pycaret = class_compare(n_select=1, turbo=True, verbose=False)
-                    else: # regression
-                        st.session_state.best_model_pycaret = reg_compare(n_select=1, turbo=True, verbose=False)
-                
-                if st.session_state.best_model_pycaret is not None:
-                    st.success(f"Best model identified: **{st.session_state.best_model_pycaret.__class__.__name__}**")
-                    st.write("Here's a summary of the models compared:")
-                    comparison_df = st.session_state.pycaret_exp.pull()
-                    st.dataframe(comparison_df)
-                    
-                    # Display core metrics of the best model
-                    best_model_row = comparison_df.iloc[0]
-                    st.markdown(f"**Best Model ({best_model_row.name}):**")
-                    if st.session_state.task_type == "classification":
-                        st.markdown(f"- Accuracy: `{best_model_row['Accuracy']:.4f}`")
-                        st.markdown(f"- AUC: `{best_model_row['AUC']:.4f}`")
-                        st.markdown(f"- F1 Score: `{best_model_row['F1']:.4f}`")
-                    else: # regression
-                        st.markdown(f"- R2 Score: `{best_model_row['R2']:.4f}`")
-                        st.markdown(f"- MAE: `{best_model_row['MAE']:.4f}`")
-                        st.markdown(f"- RMSE: `{best_model_row['RMSE']:.4f}`")
-                else:
-                    st.warning("Could not identify a best model. Check your data or try again.")
-
-
+        if st.button("📊 Compare & Select Best Model (Fast)"):
+            with st.spinner("Comparing various machine learning models (fast mode)... This might take a moment."):
+                if st.session_state.task_type == "classification":
+                    # Use n_select to quickly get the top model
+                    st.session_state.best_model_pycaret = class_compare(n_select=1, turbo=True, verbose=False)
+                elif st.session_state.task_type == "regression":
+                    st.session_state.best_model_pycaret = reg_compare(n_select=1, turbo=True, verbose=False)
+            
             if st.session_state.best_model_pycaret is not None:
-                if st.button("✨ Tune Best Model (Fast)"):
-                    with st.spinner("Fine-tuning the best model for optimal performance (limited iterations)..."):
-                        if st.session_state.task_type == "classification":
-                            st.session_state.tuned_model_pycaret = class_tune(st.session_state.best_model_pycaret, optimize='Accuracy', n_iter=5, verbose=False) # Reduced n_iter for speed
-                        else: # regression
-                            st.session_state.tuned_model_pycaret = reg_tune(st.session_state.best_model_pycaret, optimize='R2', n_iter=5, verbose=False) # Reduced n_iter for speed
-                    st.success(f"Model tuned: **{st.session_state.tuned_model_pycaret.__class__.__name__}**")
-                    st.write("Here's a summary of the tuning results:")
-                    st.dataframe(st.session_state.pycaret_exp.pull()) # Display the tuning results table
+                st.success(f"Best model identified: **{st.session_state.best_model_pycaret.__class__.__name__}**")
+                st.write("Here's a summary of the models compared:")
+                comparison_df = st.session_state.pycaret_exp.pull()
+                st.dataframe(comparison_df)
+                
+                # Display core metrics of the best model
+                best_model_row = comparison_df.iloc[0]
+                st.markdown(f"**Best Model ({best_model_row.name}):**")
+                if st.session_state.task_type == "classification":
+                    st.markdown(f"- Accuracy: `{best_model_row['Accuracy']:.4f}`")
+                    st.markdown(f"- AUC: `{best_model_row['AUC']:.4f}`")
+                    st.markdown(f"- F1 Score: `{best_model_row['F1']:.4f}`")
+                else: # regression
+                    st.markdown(f"- R2 Score: `{best_model_row['R2']:.4f}`")
+                    st.markdown(f"- MAE: `{best_model_row['MAE']:.4f}`")
+                    st.markdown(f"- RMSE: `{best_model_row['RMSE']:.4f}`")
+            else:
+                st.warning("Could not identify a best model. Check your data or try again.")
 
-                if st.session_state.tuned_model_pycaret is not None:
-                    st.subheader("📈 Model Evaluation & Interpretation for Presentation")
 
-                    # Generate and save PyCaret plots to a single PDF
-                    if st.button("Generate Model Performance Report (PDF for Client)"):
-                        model_report_pdf_name = "pycaret_model_performance_report.pdf"
-                        from matplotlib.backends.backend_pdf import PdfPages # Import here to ensure it's available for this function
+        if st.session_state.best_model_pycaret is not None:
+            if st.button("✨ Tune Best Model (Fast)"):
+                with st.spinner("Fine-tuning the best model for optimal performance (limited iterations)..."):
+                    if st.session_state.task_type == "classification":
+                        st.session_state.tuned_model_pycaret = class_tune(st.session_state.best_model_pycaret, optimize='Accuracy', n_iter=5, verbose=False) # Reduced n_iter for speed
+                    else: # regression
+                        st.session_state.tuned_model_pycaret = reg_tune(st.session_state.best_model_pycaret, optimize='R2', n_iter=5, verbose=False) # Reduced n_iter for speed
+                st.success(f"Model tuned: **{st.session_state.tuned_model_pycaret.__class__.__name__}**")
+                st.write("Here's a summary of the tuning results:")
+                st.dataframe(st.session_state.pycaret_exp.pull()) # Display the tuning results table
 
-                        with PdfPages(model_report_pdf_name) as pdf:
-                            plot_functions = {
-                                "classification": [
-                                    ("Area Under Curve (AUC)", "auc"),
-                                    ("Confusion Matrix", "confusion_matrix"),
-                                    ("Class Prediction Error", "error"),
-                                    ("Feature Importance", "feature"),
-                                    ("Decision Boundary", "boundary") # Added for classification
-                                ],
-                                "regression": [
-                                    ("Residuals Plot", "residuals"),
-                                    ("Prediction Error", "error"),
-                                    ("Feature Importance", "feature"),
-                                    ("Cooks Distance", "cooks"),
-                                    ("Learning Curve", "learning") # Added for regression
-                                ]
-                            }
-                            
-                            current_plot_funcs = plot_functions.get(st.session_state.task_type, [])
+            if st.session_state.tuned_model_pycaret is not None:
+                st.subheader("📈 Model Evaluation & Interpretation for Presentation")
 
-                            for plot_title, plot_type in current_plot_funcs:
-                                try:
-                                    st.write(f"Generating '{plot_title}' plot...")
-                                    plt.figure(figsize=(10, 7)) # Adjust figure size for PDF
-                                    
-                                    # PyCaret's plot_model saves to file, then we load and add to PDF
-                                    if st.session_state.task_type == "classification":
-                                        class_plot(st.session_state.tuned_model_pycaret, plot=plot_type, save=True, verbose=False, display_format='streamlit')
-                                    else: # regression
-                                        reg_plot(st.session_state.tuned_model_pycaret, plot=plot_type, save=True, verbose=False, display_format='streamlit')
-                                    
-                                    # PyCaret saves plots with specific names (e.g., 'auc.png', 'confusion_matrix.png')
-                                    # For 'feature' plot, it's 'Feature Importance.png'
-                                    # For 'boundary' plot, it's 'Decision Boundary.png'
-                                    # For 'learning' plot, it's 'Learning Curve.png'
-                                    
-                                    img_filename_map = {
-                                        "auc": "AUC.png",
-                                        "confusion_matrix": "Confusion Matrix.png",
-                                        "error": "Prediction Error.png",
-                                        "feature": "Feature Importance.png",
-                                        "boundary": "Decision Boundary.png",
-                                        "residuals": "Residuals.png",
-                                        "cooks": "Cooks Distance.png",
-                                        "learning": "Learning Curve.png"
-                                    }
-                                    img_path = img_filename_map.get(plot_type, f"{plot_type}.png") # Fallback to default naming
+                # Generate and save PyCaret plots to a single PDF
+                if st.button("Generate Model Performance Report (PDF for Client)"):
+                    model_report_pdf_name = "pycaret_model_performance_report.pdf"
+                    from matplotlib.backends.backend_pdf import PdfPages # Import here to ensure it's available for this function
 
-                                    if os.path.exists(img_path):
-                                        img = plt.imread(img_path)
-                                        fig, ax = plt.subplots(figsize=(10, 7))
-                                        ax.imshow(img)
-                                        ax.axis('off') # Hide axes
-                                        ax.set_title(plot_title)
-                                        pdf.savefig(fig)
-                                        plt.close(fig)
-                                        os.remove(img_path) # Clean up temp image
-                                    else:
-                                        st.warning(f"Plot file not found for '{plot_title}' ({img_path}). Skipping.")
+                    with PdfPages(model_report_pdf_name) as pdf:
+                        plot_functions = {
+                            "classification": [
+                                ("Area Under Curve (AUC)", "auc"),
+                                ("Confusion Matrix", "confusion_matrix"),
+                                ("Class Prediction Error", "error"),
+                                ("Feature Importance", "feature"),
+                                ("Decision Boundary", "boundary") # Added for classification
+                            ],
+                            "regression": [
+                                ("Residuals Plot", "residuals"),
+                                ("Prediction Error", "error"),
+                                ("Feature Importance", "feature"),
+                                ("Cooks Distance", "cooks"),
+                                ("Learning Curve", "learning") # Added for regression
+                            ]
+                        }
+                        
+                        current_plot_funcs = plot_functions.get(st.session_state.task_type, [])
 
-                                except Exception as e:
-                                    st.warning(f"Could not generate '{plot_title}' plot: {e}. Skipping this plot.")
-                                    plt.close('all') # Ensure all plots are closed
-
-                            # Interpret model (SHAP) - Summary Plot
+                        for plot_title, plot_type in current_plot_funcs:
                             try:
-                                st.write("Generating SHAP interpretation (Feature Importance Summary)...")
-                                plt.figure(figsize=(10, 7))
-                                if st.session_state.task_type == "classification":
-                                    class_interpret(st.session_state.tuned_model_pycaret, plot='summary', save=True, verbose=False, display_format='streamlit')
-                                else: # regression
-                                    reg_interpret(st.session_state.tuned_model_pycaret, plot='summary', save=True, verbose=False, display_format='streamlit')
+                                st.write(f"Generating '{plot_title}' plot...")
+                                plt.figure(figsize=(10, 7)) # Adjust figure size for PDF
                                 
-                                shap_img_path = "SHAP Summary (Bar).png" # Default name for SHAP summary plot
-                                if os.path.exists(shap_img_path):
-                                    img = plt.imread(shap_img_path)
+                                # PyCaret's plot_model saves to file, then we load and add to PDF
+                                if st.session_state.task_type == "classification":
+                                    class_plot(st.session_state.tuned_model_pycaret, plot=plot_type, save=True, verbose=False, display_format='streamlit')
+                                else: # regression
+                                    reg_plot(st.session_state.tuned_model_pycaret, plot=plot_type, save=True, verbose=False, display_format='streamlit')
+                                
+                                # PyCaret saves plots with specific names (e.g., 'auc.png', 'confusion_matrix.png')
+                                # For 'feature' plot, it's 'Feature Importance.png'
+                                # For 'boundary' plot, it's 'Decision Boundary.png'
+                                # For 'learning' plot, it's 'Learning Curve.png'
+                                
+                                img_filename_map = {
+                                    "auc": "AUC.png",
+                                    "confusion_matrix": "Confusion Matrix.png",
+                                    "error": "Prediction Error.png",
+                                    "feature": "Feature Importance.png",
+                                    "boundary": "Decision Boundary.png",
+                                    "residuals": "Residuals.png",
+                                    "cooks": "Cooks Distance.png",
+                                    "learning": "Learning Curve.png"
+                                }
+                                img_path = img_filename_map.get(plot_type, f"{plot_type}.png") # Fallback to default naming
+
+                                if os.path.exists(img_path):
+                                    img = plt.imread(img_path)
                                     fig, ax = plt.subplots(figsize=(10, 7))
                                     ax.imshow(img)
-                                    ax.axis('off')
-                                    ax.set_title("SHAP Feature Importance Summary")
+                                    ax.axis('off') # Hide axes
+                                    ax.set_title(plot_title)
                                     pdf.savefig(fig)
                                     plt.close(fig)
-                                    os.remove(shap_img_path)
+                                    os.remove(img_path) # Clean up temp image
                                 else:
-                                    st.warning(f"SHAP plot file not found: {shap_img_path}. Skipping.")
+                                    st.warning(f"Plot file not found for '{plot_title}' ({img_path}). Skipping.")
 
                             except Exception as e:
-                                st.warning(f"Error generating SHAP interpretation: {e}. Please ensure 'shap' is installed (`pip install shap`) and model supports interpretation. Skipping SHAP plot.")
-                                plt.close('all')
+                                st.warning(f"Could not generate '{plot_title}' plot: {e}. Skipping this plot.")
+                                plt.close('all') # Ensure all plots are closed
 
-                        st.success(f"📄 Model Performance Report generated as '{model_report_pdf_name}'.")
-                        st.session_state.model_report_pdf = model_report_pdf_name
-                        st.info("You can now send this report to your client using the 'Share Reports with Client' section below.")
+                        # Interpret model (SHAP) - Summary Plot
+                        try:
+                            st.write("Generating SHAP interpretation (Feature Importance Summary)...")
+                            plt.figure(figsize=(10, 7))
+                            if st.session_state.task_type == "classification":
+                                class_interpret(st.session_state.tuned_model_pycaret, plot='summary', save=True, verbose=False, display_format='streamlit')
+                            else: # regression
+                                reg_interpret(st.session_state.tuned_model_pycaret, plot='summary', save=True, verbose=False, display_format='streamlit')
+                            
+                            shap_img_path = "SHAP Summary (Bar).png" # Default name for SHAP summary plot
+                            if os.path.exists(shap_img_path):
+                                img = plt.imread(shap_img_path)
+                                fig, ax = plt.subplots(figsize=(10, 7))
+                                ax.imshow(img)
+                                ax.axis('off')
+                                ax.set_title("SHAP Feature Importance Summary")
+                                pdf.savefig(fig)
+                                plt.close(fig)
+                                os.remove(shap_img_path)
+                            else:
+                                st.warning(f"SHAP plot file not found: {shap_img_path}. Skipping.")
 
-        elif st.session_state.task_type in ["clustering", "anomaly", "nlp", "arules"]:
-            if st.button(f"⚙️ Create & Assign {st.session_state.task_type.title()} Model"):
-                with st.spinner(f"Creating and assigning {st.session_state.task_type} model..."):
-                    if st.session_state.task_type == "clustering":
-                        # Example: create KMeans model with 3 clusters
-                        model = cluster_create('kmeans', num_clusters=3, verbose=False)
-                        st.session_state.tuned_model_pycaret = cluster_assign(model, verbose=False)
-                        st.write("Preview of data with assigned clusters:")
-                        st.dataframe(st.session_state.tuned_model_pycaret.head())
-                        cluster_plot(model, plot='elbow', save=True, verbose=False) # Example plot
-                        st.success("Clustering model created and assigned!")
-                    elif st.session_state.task_type == "anomaly":
-                        # Example: create Isolation Forest model
-                        model = anomaly_create('iforest', verbose=False)
-                        st.session_state.tuned_model_pycaret = anomaly_assign(model, verbose=False)
-                        st.write("Preview of data with anomaly labels:")
-                        st.dataframe(st.session_state.tuned_model_pycaret.head())
-                        anomaly_plot(model, plot='ts_lines', save=True, verbose=False) # Example plot
-                        st.success("Anomaly Detection model created and assigned!")
-                    elif st.session_state.task_type == "nlp":
-                        # Example: create LDA model with 5 topics
-                        model = nlp_create('lda', num_topics=5, verbose=False)
-                        st.session_state.tuned_model_pycaret = nlp_assign(model, verbose=False)
-                        st.write("Preview of data with topic assignments:")
-                        st.dataframe(st.session_state.tuned_model_pycaret.head())
-                        nlp_plot(model, plot='topic_model', save=True, verbose=False) # Example plot
-                        st.success("NLP model created and assigned!")
-                    elif st.session_state.task_type == "arules":
-                        # Association Rules Mining
-                        st.session_state.tuned_model_pycaret = arules_create(min_support=0.05, min_confidence=0.1, verbose=False)
-                        st.write("Generated Association Rules:")
-                        st.dataframe(st.session_state.tuned_model_pycaret)
-                        st.success("Association Rules generated!")
-                
-                # For unsupervised tasks, we might not have a 'model_report_pdf' in the same way,
-                # but the output is directly displayed or saved by PyCaret functions.
-                st.session_state.model_report_pdf = None # Reset for unsupervised if no specific PDF is generated
+                        except Exception as e:
+                            st.warning(f"Error generating SHAP interpretation: {e}. Please ensure 'shap' is installed (`pip install shap`) and model supports interpretation. Skipping SHAP plot.")
+                            plt.close('all')
+
+                    st.success(f"📄 Model Performance Report generated as '{model_report_pdf_name}'.")
+                    st.session_state.model_report_pdf = model_report_pdf_name
+                    st.info("You can now send this report to your client using the 'Share Reports with Client' section below.")
+
 
 # --- Save/Load Model ---
 if st.session_state.tuned_model_pycaret is not None:
@@ -477,15 +413,12 @@ if st.session_state.tuned_model_pycaret is not None:
                 class_save(st.session_state.tuned_model_pycaret, model_filename)
             elif st.session_state.task_type == "regression":
                 reg_save(st.session_state.tuned_model_pycaret, model_filename)
-            elif st.session_state.task_type == "clustering":
-                cluster_save(st.session_state.tuned_model_pycaret, model_filename)
-            elif st.session_state.task_type == "anomaly":
-                anomaly_save(st.session_state.tuned_model_pycaret, model_filename)
-            elif st.session_state.task_type == "nlp":
-                nlp_save(st.session_state.tuned_model_pycaret, model_filename)
-            # arules doesn't typically save a 'model' in the same way, its output is the rules dataframe
-            st.session_state.model_saved_path = f"{model_filename}.pkl"
-        st.success(f"Model saved successfully as '{model_filename}.pkl'!")
+            else:
+                st.warning("Model saving is only supported for Classification and Regression models in this version.")
+                st.session_state.model_saved_path = None # Reset path if unsupported
+                
+            if st.session_state.model_saved_path:
+                st.success(f"Model saved successfully as '{model_filename}.pkl'!")
 
     if st.session_state.model_saved_path:
         if st.button("Load Saved Model"):
@@ -494,16 +427,12 @@ if st.session_state.tuned_model_pycaret is not None:
                     st.session_state.loaded_model_pycaret = class_load(model_filename)
                 elif st.session_state.task_type == "regression":
                     st.session_state.loaded_model_pycaret = reg_load(model_filename)
-                elif st.session_state.task_type == "clustering":
-                    st.session_state.loaded_model_pycaret = cluster_load(model_filename)
-                elif st.session_state.task_type == "anomaly":
-                    st.session_state.loaded_model_pycaret = anomaly_load(model_filename)
-                elif st.session_state.task_type == "nlp":
-                    nlp_load(model_filename) # NLP load doesn't return a model object directly for predict
-                    st.session_state.loaded_model_pycaret = "NLP Model Loaded (for inference)" # Placeholder
-                # arules doesn't have a load_model function in the same way
-            st.success("Model loaded for predictions!")
-            if st.session_state.task_type in ["classification", "regression"]:
+                else:
+                    st.warning("Model loading is only supported for Classification and Regression models in this version.")
+                    st.session_state.loaded_model_pycaret = None # Reset loaded model if unsupported
+
+            if st.session_state.loaded_model_pycaret:
+                st.success("Model loaded for predictions!")
                 st.write(f"Loaded model: **{st.session_state.loaded_model_pycaret.__class__.__name__}**")
 
 # --- Make Predictions ---
