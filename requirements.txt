@@ -1,7 +1,7 @@
 streamlit>=1.32
 pycaret[full]>=3.3
 pandas>=2.0
-scikit-learn==1.2.2 
+scikit-learn==1.2.0  # Pinned to a very specific compatible version
 matplotlib>=3.7
 seaborn>=0.13
 shap>=0.45
@@ -14,4 +14,4 @@ joblib>=1.2
 lightgbm>=4.0
 xgboost>=2.0
 catboost>=1.2
-imbalanced-learn==0.11.0 
+imbalanced-learn==0.11.0
