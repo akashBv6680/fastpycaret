@@ -9,5 +9,4 @@ openpyxl
 python-pptx
 fpdf
 email-validator
-python-dotenv
 together
