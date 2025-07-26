@@ -14,5 +14,5 @@ joblib==1.1.0
 lightgbm==3.3.2
 xgboost==1.5.2
 catboost==1.0.6
-imbalanced-learn==0.7.0 # CHANGED TO MATCH PYCARET 2.3.10 REQUIREMENT
+imbalanced-learn==0.7.0 # This is the crucial change for PyCaret 2.3.10 compatibility
 openpyxl==3.0.10
