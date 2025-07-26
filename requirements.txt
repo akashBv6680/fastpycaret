@@ -2,8 +2,8 @@ streamlit
 pandas
 matplotlib
 seaborn
-scikit-learn
-pycaret
+scikit-learn==1.2.2
+pycaret==3.3.2
 ydata-profiling
 openpyxl
 python-pptx
