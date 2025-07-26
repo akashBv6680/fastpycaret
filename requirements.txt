@@ -9,8 +9,6 @@ openpyxl
 python-pptx
 fpdf
 email-validator
-smtplib
-email
 imaplib
 together
 python-dotenv
